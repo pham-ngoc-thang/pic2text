@@ -115,7 +115,157 @@
     </div>
 
     <script>
-        // JavaScript sẽ ở đây
+       <script>
+    // ===========================================
+    // Phần JavaScript chính cho OCR
+    // ===========================================
+    const imageInput = document.getElementById('imageInput');
+    const ocrButton = document.getElementById('ocrButton');
+    const loadingText = document.getElementById('loading');
+    const imagesContainer = document.getElementById('imagesContainer');
+    const pasteArea = document.getElementById('pasteArea');
+    const noImageMessage = document.getElementById('noImageMessage');
+
+    let currentImageFiles = []; // Mảng để lưu trữ các đối tượng File/Blob ảnh
+
+    // Hàm hiển thị hình ảnh và tạo khu vực kết quả
+    function displayImageAndPrepareForOCR(file, index) {
+        noImageMessage.style.display = 'none'; // Ẩn thông báo "Chưa có ảnh nào..."
+
+        const container = document.createElement('div');
+        container.className = 'image-container';
+        container.id = `image-container-${index}`;
+
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.alt = `Ảnh ${index + 1}`;
+
+        const resultLabel = document.createElement('h4');
+        resultLabel.textContent = `Kết quả OCR cho ảnh ${index + 1}:`;
+
+        const textarea = document.createElement('textarea');
+        textarea.readOnly = true;
+        textarea.placeholder = 'Đang chờ xử lý OCR...';
+        textarea.id = `output-${index}`;
+
+        container.appendChild(img);
+        container.appendChild(resultLabel);
+        container.appendChild(textarea);
+        imagesContainer.appendChild(container);
+    }
+
+    // Xử lý khi chọn file qua input
+    imageInput.addEventListener('change', function(event) {
+        imagesContainer.innerHTML = ''; // Xóa các ảnh cũ
+        currentImageFiles = []; // Reset mảng file
+
+        if (event.target.files.length > 0) {
+            noImageMessage.style.display = 'none';
+            for (let i = 0; i < event.target.files.length; i++) {
+                const file = event.target.files[i];
+                if (file.type.startsWith('image/')) {
+                    currentImageFiles.push(file);
+                    displayImageAndPrepareForOCR(file, currentImageFiles.length - 1);
+                }
+            }
+        } else {
+            noImageMessage.style.display = 'block';
+        }
+    });
+
+    // Xử lý sự kiện dán (Paste)
+    pasteArea.addEventListener('paste', function(event) {
+        event.preventDefault(); // Ngăn chặn hành vi dán mặc định
+
+        imagesContainer.innerHTML = ''; // Xóa các ảnh cũ
+        currentImageFiles = []; // Reset mảng file
+
+        const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.indexOf('image') !== -1) {
+                const blob = item.getAsFile();
+                if (blob) {
+                    // Tạo một đối tượng File từ Blob để dễ dàng xử lý sau này
+                    const imageFile = new File([blob], `pasted-image-${Date.now()}.png`, { type: blob.type });
+                    currentImageFiles.push(imageFile);
+                    displayImageAndPrepareForOCR(imageFile, currentImageFiles.length - 1);
+                    // Sau khi có ảnh dán, xóa nội dung trong pasteArea để tránh hiển thị ảnh lớn
+                    pasteArea.innerHTML = 'Dán ảnh vào đây (Ctrl+V)';
+                }
+            }
+        }
+        if (currentImageFiles.length === 0) {
+            noImageMessage.style.display = 'block';
+            pasteArea.innerHTML = 'Dán ảnh vào đây (Ctrl+V)'; // Đảm bảo text gốc hiển thị lại
+        }
+    });
+
+
+    // Xử lý nút OCR
+    ocrButton.addEventListener('click', async () => {
+        if (currentImageFiles.length === 0) {
+            alert('Vui lòng chọn hoặc dán ít nhất một hình ảnh!');
+            return;
+        }
+
+        loadingText.style.display = 'block';
+        loadingText.textContent = 'Đang tải Tesseract.js core...';
+
+        // Tắt nút để tránh click nhiều lần khi đang xử lý
+        ocrButton.disabled = true;
+        imageInput.disabled = true;
+        pasteArea.contentEditable = 'false';
+
+        try {
+            // Tạo một worker Tesseract duy nhất để xử lý tất cả các ảnh
+            const worker = await Tesseract.createWorker({
+                logger: m => {
+                    if (m.status === 'recognizing') {
+                        // Cập nhật trạng thái tổng thể
+                        loadingText.textContent = `Đang xử lý: ${Math.round(m.progress * 100)}%`;
+                    } else {
+                        loadingText.textContent = `Trạng thái: ${m.status}`;
+                    }
+                    console.log(m);
+                }
+            });
+
+            await worker.loadLanguage('vie+eng'); // Tải gói ngôn ngữ tiếng Việt và tiếng Anh
+            await worker.initialize('vie+eng'); // Khởi tạo với cả hai ngôn ngữ
+
+            // Xử lý từng ảnh một
+            for (let i = 0; i < currentImageFiles.length; i++) {
+                const imageFile = currentImageFiles[i];
+                const outputTextarea = document.getElementById(`output-${i}`);
+                outputTextarea.placeholder = `Đang xử lý ảnh ${i + 1}...`;
+
+                try {
+                    const { data: { text } } = await worker.recognize(imageFile);
+                    outputTextarea.value = text;
+                } catch (imageError) {
+                    console.error(`Lỗi OCR cho ảnh ${i + 1}:`, imageError);
+                    outputTextarea.value = 'Lỗi khi xử lý ảnh này: ' + imageError.message;
+                }
+            }
+
+            await worker.terminate(); // Kết thúc worker sau khi hoàn thành tất cả
+            loadingText.textContent = 'Hoàn thành!';
+
+        } catch (error) {
+            console.error('Lỗi OCR tổng thể:', error);
+            loadingText.textContent = 'Đã xảy ra lỗi tổng thể: ' + error.message;
+        } finally {
+            // Luôn bật lại nút và khu vực dán
+            ocrButton.disabled = false;
+            imageInput.disabled = false;
+            pasteArea.contentEditable = 'true';
+            loadingText.style.display = 'none';
+        }
+    });
+</script>
+</body>
+</html>
     </script>
 </body>
 </html>
