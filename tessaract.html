@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR with Tesseract</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #output { border: 1px solid #ccc; padding: 10px; min-height: 100px; margin-top: 20px; white-space: pre-wrap; }
+        #loading { display: none; color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Chuyển ảnh sang văn bản (OCR)</h1>
+
+    <input type="file" id="imageInput" accept="image/*">
+    <button id="uploadButton">Thực hiện OCR</button>
+
+    <p id="loading">Đang xử lý, vui lòng chờ...</p>
+    <h2>Kết quả:</h2>
+    <div id="output"></div>
+
+    <script>
+        document.getElementById('uploadButton').addEventListener('click', async () => {
+            const imageInput = document.getElementById('imageInput');
+            const outputDiv = document.getElementById('output');
+            const loadingText = document.getElementById('loading');
+
+            if (!imageInput.files.length) {
+                alert('Vui lòng chọn một hình ảnh!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', imageInput.files[0]);
+
+            outputDiv.textContent = ''; // Xóa kết quả cũ
+            loadingText.style.display = 'block'; // Hiển thị thông báo loading
+
+            try {
+                const response = await fetch('/upload', { // Endpoint trên server của bạn
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+
+                const data = await response.json(); // Hoặc response.text() nếu server trả về văn bản thuần túy
+                outputDiv.textContent = data.text;
+            } catch (error) {
+                console.error('Lỗi khi gửi ảnh lên server:', error);
+                outputDiv.textContent = 'Đã xảy ra lỗi khi xử lý OCR: ' + error.message;
+            } finally {
+                loadingText.style.display = 'none'; // Ẩn thông báo loading
+            }
+        });
+    </script>
+</body>
+</html>
