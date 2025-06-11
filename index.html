@@ -90,7 +90,7 @@
         <input type="file" id="imageInput" accept="image/*">
         <button id="ocrButton">Thực hiện OCR</button>
         <p id="loading" style="display: none;">Đang xử lý, vui lòng chờ...</p>
-        
+
         <h3>Xem trước ảnh:</h3>
         <img id="imagePreview" src="#" alt="Image Preview" style="display:none;">
 
@@ -202,7 +202,7 @@
                     qrResultTextarea.value = decodedText;
                     qrStatus.textContent = 'Đã quét thành công!';
                     console.log(`Mã QR: ${decodedText}`, decodedResult);
-                    
+
                     // Dừng quét ngay sau khi đọc thành công
                     if (html5QrCode.isScanning) { // Kiểm tra nếu nó đang quét
                         html5QrCode.stop().then(ignore => {
@@ -231,7 +231,7 @@
                         // console.warn(errorMessage); // Log lỗi nếu quét không thành công (ví dụ: không tìm thấy mã QR)
                     }
                 );
-                
+
                 qrStatus.textContent = 'Đang quét mã QR...';
 
             } catch (err) {
