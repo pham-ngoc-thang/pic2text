@@ -3,30 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCR with Tesseract.js</title>
+    <title>OCR & QR Scanner App</title>
+
     <script src='https://unpkg.com/tesseract.js@4.1.0/dist/tesseract.min.js'></script>
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        #output { border: 1px solid #ccc; padding: 10px; min-height: 100px; margin-top: 20px; white-space: pre-wrap; }
-        #loading { display: none; color: blue; }
-        img { max-width: 100%; height: auto; display: block; margin-top: 10px; border: 1px solid #eee; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        h1, h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+            margin-top: 30px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        input[type="file"], textarea {
+            width: calc(100% - 22px); /* Adjusting for padding and border */
+            padding: 10px;
+            margin-top: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box; /* Include padding and border in the element's total width and height */
+        }
+        #output, #qrResultTextarea {
+            min-height: 100px;
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            white-space: pre-wrap; /* Preserve whitespace and break lines */
+            word-wrap: break-word; /* Break long words */
+        }
+        #loading, #qrStatus {
+            color: #e67e22;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        #imagePreview {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        #qr-reader {
+            width: 100%;
+            max-width: 500px; /* Limit width for better display */
+            margin: 20px auto; /* Center it */
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden; /* Ensure video fits */
+        }
+        hr {
+            border: 0;
+            height: 1px;
+            background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));
+            margin: 40px 0;
+        }
     </style>
 </head>
 <body>
-    <h1>Chuyển ảnh sang văn bản (OCR) với Tesseract.js</h1>
+    <h1>Ứng dụng OCR & Quét Mã QR</h1>
 
-    <input type="file" id="imageInput" accept="image/*">
-    <button id="ocrButton">Thực hiện OCR</button>
+    <div id="ocr-section">
+        <h2>Chuyển ảnh sang văn bản (OCR)</h2>
+        <input type="file" id="imageInput" accept="image/*">
+        <button id="ocrButton">Thực hiện OCR</button>
+        <p id="loading" style="display: none;">Đang xử lý, vui lòng chờ...</p>
+        
+        <h3>Xem trước ảnh:</h3>
+        <img id="imagePreview" src="#" alt="Image Preview" style="display:none;">
 
-    <p id="loading">Đang tải core và xử lý, vui lòng chờ...</p>
-    
-    <h2>Xem trước ảnh:</h2>
-    <img id="imagePreview" src="#" alt="Image Preview" style="display:none;">
+        <h3>Kết quả OCR:</h3>
+        <div id="output"></div>
+    </div>
 
-    <h2>Kết quả:</h2>
-    <div id="output"></div>
+    <hr>
+
+    <div id="qr-section">
+        <h2>Đọc mã QR từ Webcam</h2>
+        <button id="startQrScanButton">Bắt đầu quét QR</button>
+        <button id="stopQrScanButton" style="display:none;">Dừng quét QR</button>
+
+        <p id="qrStatus" style="color: gray;">(Vui lòng cấp quyền truy cập webcam)</p>
+        <div id="qr-reader"></div> <h3>Thông tin mã QR:</h3>
+        <textarea id="qrResultTextarea" rows="5" placeholder="Kết quả mã QR sẽ hiển thị ở đây..." readonly></textarea>
+    </div>
 
     <script>
+        // ===========================================
+        // Phần JavaScript cho OCR (Tesseract.js)
+        // ===========================================
         document.getElementById('imageInput').addEventListener('change', function(event) {
             const [file] = event.target.files;
             if (file) {
@@ -52,7 +139,7 @@
 
             outputDiv.textContent = ''; // Xóa kết quả cũ
             loadingText.style.display = 'block'; // Hiển thị thông báo loading
-            loadingText.textContent = 'Đang tải Tesseract.js core...';
+            loadingText.textContent = 'Đang tải Tesseract.js core...'; // Cập nhật trạng thái
 
             try {
                 // Tạo một worker Tesseract
@@ -70,7 +157,7 @@
 
                 await worker.loadLanguage('eng'); // Tải gói ngôn ngữ tiếng Anh
                 await worker.initialize('eng'); // Khởi tạo với ngôn ngữ tiếng Anh
-                // Nếu muốn dùng tiếng Việt:
+                // Nếu muốn dùng tiếng Việt (cần cài đặt gói ngôn ngữ 'vie' cho Tesseract.js):
                 // await worker.loadLanguage('vie');
                 // await worker.initialize('vie');
 
@@ -84,6 +171,95 @@
                 outputDiv.textContent = 'Đã xảy ra lỗi khi xử lý OCR: ' + error.message;
             } finally {
                 loadingText.style.display = 'none'; // Ẩn thông báo loading
+            }
+        });
+
+        // ===========================================
+        // Phần JavaScript cho Đọc mã QR (html5-qrcode)
+        // ===========================================
+        const startQrScanButton = document.getElementById('startQrScanButton');
+        const stopQrScanButton = document.getElementById('stopQrScanButton');
+        const qrReaderDiv = document.getElementById('qr-reader');
+        const qrResultTextarea = document.getElementById('qrResultTextarea');
+        const qrStatus = document.getElementById('qrStatus');
+
+        let html5QrCode = null; // Biến để lưu trữ đối tượng Html5QrcodeScanner
+
+        startQrScanButton.addEventListener('click', async () => {
+            qrResultTextarea.value = ''; // Xóa kết quả cũ
+            qrStatus.textContent = 'Đang khởi tạo webcam...';
+            startQrScanButton.style.display = 'none';
+            stopQrScanButton.style.display = 'inline-block';
+
+            // Tạo một instance mới mỗi khi bắt đầu, hoặc kiểm tra và sử dụng lại
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("qr-reader");
+            }
+
+            try {
+                const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+                    // Khi quét thành công, hiển thị kết quả và dừng quét
+                    qrResultTextarea.value = decodedText;
+                    qrStatus.textContent = 'Đã quét thành công!';
+                    console.log(`Mã QR: ${decodedText}`, decodedResult);
+                    
+                    // Dừng quét ngay sau khi đọc thành công
+                    if (html5QrCode.isScanning) { // Kiểm tra nếu nó đang quét
+                        html5QrCode.stop().then(ignore => {
+                            qrStatus.textContent = 'Đã dừng quét QR.';
+                            startQrScanButton.style.display = 'inline-block';
+                            stopQrScanButton.style.display = 'none';
+                        }).catch(err => {
+                            qrStatus.textContent = 'Lỗi khi dừng quét: ' + err;
+                            console.error("Lỗi khi dừng quét:", err);
+                        });
+                    }
+                };
+
+                const config = { 
+                    fps: 10, // Số khung hình mỗi giây
+                    qrbox: { width: 250, height: 250 }, // Kích thước khung quét
+                    // Tùy chọn để hiển thị camera mặc định nếu facingMode không được hỗ trợ
+                    rememberMethod: true 
+                };
+
+                // Bắt đầu quét từ camera sau (nếu có), hoặc camera mặc định
+                // Lưu ý: "environment" là camera sau, "user" là camera trước.
+                // Nếu facingMode "environment" không hoạt động, nó sẽ tự động thử camera mặc định.
+                await html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback, 
+                    (errorMessage) => {
+                        // console.warn(errorMessage); // Log lỗi nếu quét không thành công (ví dụ: không tìm thấy mã QR)
+                    }
+                );
+                
+                qrStatus.textContent = 'Đang quét mã QR...';
+
+            } catch (err) {
+                qrResultTextarea.value = '';
+                qrStatus.textContent = 'Lỗi khi bắt đầu quét QR. Vui lòng cấp quyền truy cập webcam và thử lại: ' + err;
+                console.error("Lỗi khi bắt đầu quét QR:", err);
+                startQrScanButton.style.display = 'inline-block';
+                stopQrScanButton.style.display = 'none';
+            }
+        });
+
+        stopQrScanButton.addEventListener('click', () => {
+            if (html5QrCode && html5QrCode.isScanning) { // Kiểm tra trạng thái quét
+                html5QrCode.stop().then(ignore => {
+                    qrStatus.textContent = 'Đã dừng quét QR.';
+                    startQrScanButton.style.display = 'inline-block';
+                    stopQrScanButton.style.display = 'none';
+                }).catch(err => {
+                    qrStatus.textContent = 'Lỗi khi dừng quét: ' + err;
+                    console.error("Lỗi khi dừng quét:", err);
+                });
+            }
+        });
+
+        // Xử lý khi trang bị đóng hoặc refresh để dừng webcam
+        window.addEventListener('beforeunload', () => {
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().catch(err => console.error("Lỗi khi dừng HTML5QrcodeScanner:", err));
             }
         });
     </script>
